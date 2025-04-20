@@ -8,14 +8,15 @@ app.use(bodyParser.json());
 
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const numero = messageData.from;
+
+// Función para enviar mensaje de texto
 async function enviarMensajeWhatsApp(to, texto) {
   try {
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: 'whatsapp',
-        to: to,  // <-- esto debe ser el número del usuario, como 34685124760
+        to: to,
         type: 'text',
         text: { body: texto }
       },
@@ -32,10 +33,9 @@ async function enviarMensajeWhatsApp(to, texto) {
   }
 }
 
-
+// Webhook POST para recibir mensajes
 app.post('/webhook', async (req, res) => {
   const body = req.body;
-
   console.log("📩 Webhook recibido:", JSON.stringify(body, null, 2));
 
   if (body.object === 'whatsapp_business_account') {
@@ -53,6 +53,7 @@ app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
 });
 
+// Verificación GET del Webhook
 app.get('/webhook', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query['hub.mode'];
