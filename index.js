@@ -41,9 +41,10 @@ app.post('/webhook', async (req, res) => {
     const entry = body.entry?.[0];
     const changes = entry?.changes?.[0];
     const messageData = changes?.value?.messages?.[0];
+    const contact = changes?.value?.contacts?.[0];
 
-    if (messageData && messageData.from && messageData.text) {
-      const numero = messageData.from;  // ✅ Correcto: el número del usuario
+    if (messageData && contact && messageData.text) {
+      const numero = contact.wa_id;
       const mensaje = messageData.text.body.trim().toLowerCase();
       await enviarMensajeWhatsApp(numero, `Hola cariño 😊 Has dicho: "${mensaje}"`);
     }
