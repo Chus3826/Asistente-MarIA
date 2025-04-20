@@ -8,14 +8,14 @@ app.use(bodyParser.json());
 
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-
+const numero = messageData.from;
 async function enviarMensajeWhatsApp(to, texto) {
   try {
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
       {
         messaging_product: 'whatsapp',
-        to: to,
+        to: to,  // <-- esto debe ser el número del usuario, como 34685124760
         type: 'text',
         text: { body: texto }
       },
@@ -31,6 +31,7 @@ async function enviarMensajeWhatsApp(to, texto) {
     console.error('❌ Error al enviar mensaje:', error.response?.data || error.message);
   }
 }
+
 
 app.post('/webhook', async (req, res) => {
   const body = req.body;
