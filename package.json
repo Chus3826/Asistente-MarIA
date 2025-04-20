@@ -1,0 +1,16 @@
+{
+  "name": "asistente-clara",
+  "version": "6.0.0",
+  "description": "Asistente Clara con funciones de eliminación",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "body-parser": "^1.20.2",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.2",
+    "twilio": "^4.15.0"
+  }
+}
