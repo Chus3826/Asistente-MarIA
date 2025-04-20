@@ -9,7 +9,7 @@ app.use(bodyParser.json());
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
-// Función para enviar mensaje de texto
+// Enviar mensaje de texto al usuario
 async function enviarMensajeWhatsApp(to, texto) {
   try {
     await axios.post(
@@ -33,7 +33,6 @@ async function enviarMensajeWhatsApp(to, texto) {
   }
 }
 
-// Webhook POST para recibir mensajes
 app.post('/webhook', async (req, res) => {
   const body = req.body;
   console.log("📩 Webhook recibido:", JSON.stringify(body, null, 2));
@@ -44,7 +43,7 @@ app.post('/webhook', async (req, res) => {
     const messageData = changes?.value?.messages?.[0];
 
     if (messageData && messageData.from && messageData.text) {
-      const numero = messageData.from;
+      const numero = messageData.from;  // ✅ Correcto: el número del usuario
       const mensaje = messageData.text.body.trim().toLowerCase();
       await enviarMensajeWhatsApp(numero, `Hola cariño 😊 Has dicho: "${mensaje}"`);
     }
@@ -53,7 +52,6 @@ app.post('/webhook', async (req, res) => {
   res.sendStatus(200);
 });
 
-// Verificación GET del Webhook
 app.get('/webhook', (req, res) => {
   const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
   const mode = req.query['hub.mode'];
