@@ -9,8 +9,10 @@ app.use(bodyParser.json());
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
 
-// Enviar mensaje de texto al usuario
+// Función para enviar mensaje de texto al usuario
 async function enviarMensajeWhatsApp(to, texto) {
+  console.log(`📤 Intentando enviar mensaje a: ${to}`); // nuevo log agregado
+
   try {
     await axios.post(
       `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
@@ -44,7 +46,7 @@ app.post('/webhook', async (req, res) => {
     const contact = changes?.value?.contacts?.[0];
 
     if (messageData && contact && messageData.text) {
-      const numero = contact.wa_id;
+      const numero = contact.wa_id; // número del usuario
       const mensaje = messageData.text.body.trim().toLowerCase();
       await enviarMensajeWhatsApp(numero, `Hola cariño 😊 Has dicho: "${mensaje}"`);
     }
