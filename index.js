@@ -10,7 +10,6 @@ app.use(bodyParser.json());
 
 const usuarios = {};
 
-// Funciones auxiliares para fecha y hora
 function obtenerFechaActualISO() {
   const ahoraUTC = new Date();
   const ahoraEspaña = new Date(ahoraUTC.getTime() + 2 * 60 * 60 * 1000);
@@ -39,7 +38,6 @@ function enviarMensajeWhatsApp(numero, texto) {
   });
 }
 
-// Webhook de verificación
 app.get('/webhook', (req, res) => {
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
@@ -51,7 +49,6 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// Webhook de mensajes
 app.post('/webhook', async (req, res) => {
   const entry = req.body.entry?.[0];
   const changes = entry?.changes?.[0];
@@ -62,10 +59,10 @@ app.post('/webhook', async (req, res) => {
     const numero = mensaje.from;
     const texto = mensaje.text.body.trim().toLowerCase();
 
-    if (!usuarios[numero]) usuarios[numero] = { estado: null, medicamentos: [], citas: [] };
+    if (!usuarios[numero]) usuarios[numero] = { estado: null, medicamentos: [], citas: [], medicamentoTemp: null };
     const usuario = usuarios[numero];
 
-    if (texto === 'medicamento') {
+    if (usuario.estado === null && texto === 'medicamento') {
       usuario.estado = 'medicamento_nombre';
       return enviarMensajeWhatsApp(numero, '💊 ¿Cuál es el nombre del medicamento?');
     }
@@ -79,10 +76,11 @@ app.post('/webhook', async (req, res) => {
     if (usuario.estado === 'medicamento_hora') {
       usuario.medicamentos.push({ nombre: usuario.medicamentoTemp, hora: texto });
       usuario.estado = null;
-      return enviarMensajeWhatsApp(numero, `Perfecto. Te recordaré tomar ${usuario.medicamentoTemp} cada día a las ${texto}.`);
+      usuario.medicamentoTemp = null;
+      return enviarMensajeWhatsApp(numero, `Perfecto. Te recordaré tomar ${texto} cada día.`);
     }
 
-    if (texto === 'cita') {
+    if (usuario.estado === null && texto === 'cita') {
       usuario.estado = 'cita_info';
       return enviarMensajeWhatsApp(numero, '📅 Escríbeme la cita con fecha y hora. Ej: Médico de cabecera el 25/04 a las 12:00');
     }
@@ -93,7 +91,7 @@ app.post('/webhook', async (req, res) => {
       return enviarMensajeWhatsApp(numero, `✅ Cita guardada: ${texto}`);
     }
 
-    if (texto === 'ver') {
+    if (usuario.estado === null && texto === 'ver') {
       let resumen = '📋 Esto es lo que tengo guardado:\n\n💊 Medicamentos:\n';
       usuario.medicamentos.forEach((m, i) => {
         resumen += `${i + 1}. ${m.nombre} a las ${m.hora}\n`;
@@ -109,20 +107,21 @@ app.post('/webhook', async (req, res) => {
       return enviarMensajeWhatsApp(numero, resumen);
     }
 
-    if (texto === 'eliminar') {
+    if (usuario.estado === null && texto === 'eliminar') {
       usuario.medicamentos = [];
       usuario.citas = [];
       usuario.estado = null;
       return enviarMensajeWhatsApp(numero, '❌ He eliminado todos tus recordatorios.');
     }
 
-    return enviarMensajeWhatsApp(numero, 'Puedes decirme "medicamento", "cita", "ver" o "eliminar".');
+    if (usuario.estado === null) {
+      return enviarMensajeWhatsApp(numero, 'Puedes decirme "medicamento", "cita", "ver" o "eliminar".');
+    }
   }
 
   res.sendStatus(200);
 });
 
-// Tareas programadas cada minuto
 cron.schedule('* * * * *', () => {
   const ahora = obtenerHoraLocal();
   Object.entries(usuarios).forEach(([numero, usuario]) => {
