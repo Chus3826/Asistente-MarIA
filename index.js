@@ -90,21 +90,26 @@ app.post('/webhook', async (req, res) => {
     // Comandos
     switch (texto) {
       case 'medicamento':
-        estadosUsuario[numero] = { esperando: 'medicamento_nombre' };
+        delete estadosUsuario[numero];
+estadosUsuario[numero] = { esperando: 'medicamento_nombre' };
         return enviarMensajeWhatsApp(numero, '¿Cuál es el nombre del medicamento?');
       case 'cita':
-        estadosUsuario[numero] = { esperando: 'cita_info' };
+        delete estadosUsuario[numero];
+estadosUsuario[numero] = { esperando: 'cita_info' };
         return enviarMensajeWhatsApp(numero, 'Escríbeme la cita con fecha y hora. Ej: Médico de cabecera el 25/04 a las 12:00');
       case 'ver':
         const listaMeds = recordatorios[numero].medicamentos.map((m, i) => `${i + 1}. ${m.nombre} a las ${m.hora}`).join('\n') || 'No hay medicamentos registrados.';
         const listaCitas = recordatorios[numero].citas.map((c, i) => `${i + 1}. ${c}`).join('\n') || 'No hay citas registradas.';
-        return enviarMensajeWhatsApp(numero, `📋 Esto es lo que tengo guardado:\n\n💊 Medicamentos:\n${listaMeds}\n\n📅 Citas:\n${listaCitas}`);
+        delete estadosUsuario[numero];
+return enviarMensajeWhatsApp(numero, `📋 Esto es lo que tengo guardado:\n\n💊 Medicamentos:\n${listaMeds}\n\n📅 Citas:\n${listaCitas}`);
       case 'eliminar':
-        estadosUsuario[numero] = { esperando: 'eliminar_menu' };
+        delete estadosUsuario[numero];
+estadosUsuario[numero] = { esperando: 'eliminar_menu' };
         return enviarMensajeWhatsApp(numero, '¿Qué deseas eliminar? Escribe "medicamento" o "cita"');
       case 'medicamento':
       case 'cita':
-        estadosUsuario[numero] = { esperando: 'eliminar', tipo: texto };
+        delete estadosUsuario[numero];
+estadosUsuario[numero] = { esperando: 'eliminar', tipo: texto };
         const items = texto === 'medicamento'
           ? recordatorios[numero].medicamentos.map((m, i) => `${i + 1}. ${m.nombre} a las ${m.hora}`).join('\n')
           : recordatorios[numero].citas.map((c, i) => `${i + 1}. ${c}`).join('\n');
