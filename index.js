@@ -1,3 +1,4 @@
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
@@ -7,144 +8,133 @@ require('dotenv').config();
 const app = express();
 app.use(bodyParser.json());
 
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const usuarios = {};
 
-const recordatorios = {}; // { numero: { medicamentos: [], citas: [] } }
-const estadosUsuario = {}; // Para manejar el flujo conversacional por número
-
-// Función para enviar mensaje de WhatsApp
-async function enviarMensajeWhatsApp(to, texto) {
-  try {
-    await axios.post(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        messaging_product: 'whatsapp',
-        to,
-        type: 'text',
-        text: { body: texto }
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${ACCESS_TOKEN}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-  } catch (error) {
-    console.error('❌ Error al enviar mensaje:', error.response?.data || error.message);
-  }
+// Funciones auxiliares para fecha y hora
+function obtenerFechaActualISO() {
+  const ahoraUTC = new Date();
+  const ahoraEspaña = new Date(ahoraUTC.getTime() + 2 * 60 * 60 * 1000);
+  return ahoraEspaña.toISOString().split('T')[0];
 }
 
-// Webhook para recibir mensajes
-app.post('/webhook', async (req, res) => {
-  const entry = req.body?.entry?.[0];
-  const changes = entry?.changes?.[0];
-  const message = changes?.value?.messages?.[0];
-  const numero = changes?.value?.contacts?.[0]?.wa_id;
+function obtenerHoraLocal() {
+  const ahoraUTC = new Date();
+  const ahoraEspaña = new Date(ahoraUTC.getTime() + 2 * 60 * 60 * 1000);
+  return ahoraEspaña.toISOString().split('T')[1].slice(0, 5);
+}
 
-  if (message?.text?.body && numero) {
-    const texto = message.text.body.trim().toLowerCase();
-
-    if (!recordatorios[numero]) {
-      recordatorios[numero] = { medicamentos: [], citas: [] };
+function enviarMensajeWhatsApp(numero, texto) {
+  console.log(`📤 Enviando a ${numero}: ${texto}`);
+  return axios.post(`https://graph.facebook.com/v17.0/${process.env.PHONE_NUMBER_ID}/messages`, {
+    messaging_product: "whatsapp",
+    to: numero,
+    text: { body: texto }
+  }, {
+    headers: {
+      Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+      "Content-Type": "application/json"
     }
+  }).catch(err => {
+    console.error("❌ Error al enviar mensaje:", err?.response?.data || err.message);
+  });
+}
 
-    const estado = estadosUsuario[numero];
-
-    if (!["medicamento", "cita", "ver", "eliminar"].includes(texto) && estado?.esperando === 'medicamento_nombre') {
-      estadosUsuario[numero] = { esperando: 'medicamento_hora', nombre: texto };
-      return enviarMensajeWhatsApp(numero, '¿A qué hora quieres tomar ese medicamento? (Ej: 09:00)');
-    }
-
-    if (!["medicamento", "cita", "ver", "eliminar"].includes(texto) && estado?.esperando === 'medicamento_hora') {
-      recordatorios[numero].medicamentos.push({ nombre: estado.nombre, hora: texto });
-      delete estadosUsuario[numero];
-      return enviarMensajeWhatsApp(numero, `Perfecto. Te recordaré tomar ${estado.nombre} cada día a las ${texto}.`);
-    }
-
-    if (!["medicamento", "cita", "ver", "eliminar"].includes(texto) && estado?.esperando === 'cita_info') {
-      recordatorios[numero].citas.push(texto);
-      delete estadosUsuario[numero];
-      return enviarMensajeWhatsApp(numero, `Cita registrada: ${texto}`);
-    }
-
-    if (!["medicamento", "cita", "ver", "eliminar"].includes(texto) && estado?.esperando === 'eliminar') {
-      const indice = parseInt(texto) - 1;
-      if (!isNaN(indice)) {
-        if (estado.tipo === 'medicamento' && recordatorios[numero].medicamentos[indice]) {
-          const eliminado = recordatorios[numero].medicamentos.splice(indice, 1);
-          delete estadosUsuario[numero];
-          return enviarMensajeWhatsApp(numero, `Eliminado: ${eliminado[0].nombre}`);
-        }
-        if (estado.tipo === 'cita' && recordatorios[numero].citas[indice]) {
-          const eliminado = recordatorios[numero].citas.splice(indice, 1);
-          delete estadosUsuario[numero];
-          return enviarMensajeWhatsApp(numero, `Cita eliminada: ${eliminado[0]}`);
-        }
-      }
-      return enviarMensajeWhatsApp(numero, 'Número no válido. Intenta de nuevo.');
-    }
-
-    // Comandos
-    switch (texto) {
-      case 'medicamento':
-        estadosUsuario[numero] = { esperando: 'medicamento_nombre' };
-        return enviarMensajeWhatsApp(numero, '¿Cuál es el nombre del medicamento?');
-      case 'cita':
-        estadosUsuario[numero] = { esperando: 'cita_info' };
-        return enviarMensajeWhatsApp(numero, 'Escríbeme la cita con fecha y hora. Ej: Médico de cabecera el 25/04 a las 12:00');
-      case 'ver':
-        const listaMeds = recordatorios[numero].medicamentos.map((m, i) => `${i + 1}. ${m.nombre} a las ${m.hora}`).join('\n') || 'No hay medicamentos registrados.';
-        const listaCitas = recordatorios[numero].citas.map((c, i) => `${i + 1}. ${c}`).join('\n') || 'No hay citas registradas.';
-        return enviarMensajeWhatsApp(numero, `📋 Esto es lo que tengo guardado:\n\n💊 Medicamentos:\n${listaMeds}\n\n📅 Citas:\n${listaCitas}`);
-      case 'eliminar':
-        estadosUsuario[numero] = { esperando: 'eliminar_menu' };
-        return enviarMensajeWhatsApp(numero, '¿Qué deseas eliminar? Escribe "medicamento" o "cita"');
-      case 'medicamento':
-      case 'cita':
-        estadosUsuario[numero] = { esperando: 'eliminar', tipo: texto };
-        const items = texto === 'medicamento'
-          ? recordatorios[numero].medicamentos.map((m, i) => `${i + 1}. ${m.nombre} a las ${m.hora}`).join('\n')
-          : recordatorios[numero].citas.map((c, i) => `${i + 1}. ${c}`).join('\n');
-        return enviarMensajeWhatsApp(numero, `Escribe el número del ${texto} que quieres eliminar:\n${items}`);
-      default:
-        return enviarMensajeWhatsApp(numero, 'Puedes decirme "medicamento", "cita", "ver" o "eliminar".');
-    }
-  }
-
-  res.sendStatus(200);
-});
-
-// Verificación del webhook
+// Webhook de verificación
 app.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-
-  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-    console.log('🟢 Webhook verificado correctamente.');
-    res.status(200).send(challenge);
+  if (token === process.env.VERIFY_TOKEN) {
+    console.log("✅ Webhook verificado");
+    res.send(challenge);
   } else {
     res.sendStatus(403);
   }
 });
 
-// Envío diario de recordatorios de medicación
+// Webhook de mensajes
+app.post('/webhook', async (req, res) => {
+  const entry = req.body.entry?.[0];
+  const changes = entry?.changes?.[0];
+  const value = changes?.value;
+  const mensaje = value?.messages?.[0];
+
+  if (mensaje?.type === 'text') {
+    const numero = mensaje.from;
+    const texto = mensaje.text.body.trim().toLowerCase();
+
+    if (!usuarios[numero]) usuarios[numero] = { estado: null, medicamentos: [], citas: [] };
+    const usuario = usuarios[numero];
+
+    if (texto === 'medicamento') {
+      usuario.estado = 'medicamento_nombre';
+      return enviarMensajeWhatsApp(numero, '💊 ¿Cuál es el nombre del medicamento?');
+    }
+
+    if (usuario.estado === 'medicamento_nombre') {
+      usuario.medicamentoTemp = texto;
+      usuario.estado = 'medicamento_hora';
+      return enviarMensajeWhatsApp(numero, '🕐 ¿A qué hora quieres tomar ese medicamento? (Ej: 09:00)');
+    }
+
+    if (usuario.estado === 'medicamento_hora') {
+      usuario.medicamentos.push({ nombre: usuario.medicamentoTemp, hora: texto });
+      usuario.estado = null;
+      return enviarMensajeWhatsApp(numero, `Perfecto. Te recordaré tomar ${usuario.medicamentoTemp} cada día a las ${texto}.`);
+    }
+
+    if (texto === 'cita') {
+      usuario.estado = 'cita_info';
+      return enviarMensajeWhatsApp(numero, '📅 Escríbeme la cita con fecha y hora. Ej: Médico de cabecera el 25/04 a las 12:00');
+    }
+
+    if (usuario.estado === 'cita_info') {
+      usuario.citas.push(texto);
+      usuario.estado = null;
+      return enviarMensajeWhatsApp(numero, `✅ Cita guardada: ${texto}`);
+    }
+
+    if (texto === 'ver') {
+      let resumen = '📋 Esto es lo que tengo guardado:\n\n💊 Medicamentos:\n';
+      usuario.medicamentos.forEach((m, i) => {
+        resumen += `${i + 1}. ${m.nombre} a las ${m.hora}\n`;
+      });
+      if (usuario.medicamentos.length === 0) resumen += 'No hay medicamentos registrados.\n';
+
+      resumen += '\n📅 Citas:\n';
+      usuario.citas.forEach((c, i) => {
+        resumen += `${i + 1}. ${c}\n`;
+      });
+      if (usuario.citas.length === 0) resumen += 'No hay citas registradas.';
+
+      return enviarMensajeWhatsApp(numero, resumen);
+    }
+
+    if (texto === 'eliminar') {
+      usuario.medicamentos = [];
+      usuario.citas = [];
+      usuario.estado = null;
+      return enviarMensajeWhatsApp(numero, '❌ He eliminado todos tus recordatorios.');
+    }
+
+    return enviarMensajeWhatsApp(numero, 'Puedes decirme "medicamento", "cita", "ver" o "eliminar".');
+  }
+
+  res.sendStatus(200);
+});
+
+// Tareas programadas cada minuto
 cron.schedule('* * * * *', () => {
-  const ahora = new Date();
-  const horaActual = ahora.toTimeString().slice(0, 5);
-  Object.entries(recordatorios).forEach(([numero, datos]) => {
-    datos.medicamentos.forEach((m) => {
-      if (m.hora === horaActual) {
-        enviarMensajeWhatsApp(numero, `💊 Recuerda tomar tu medicamento: ${m.nombre}`);
+  const ahora = obtenerHoraLocal();
+  Object.entries(usuarios).forEach(([numero, usuario]) => {
+    usuario.medicamentos.forEach(med => {
+      if (med.hora === ahora) {
+        enviarMensajeWhatsApp(numero, `⏰ ¡Hora de tomar tu medicamento: ${med.nombre}!`);
       }
     });
   });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log('🚀 Clara con recordatorios activos en el puerto', PORT);
+  console.log(`🚀 Clara (Cloud API) escuchando en el puerto ${PORT}`);
 });
